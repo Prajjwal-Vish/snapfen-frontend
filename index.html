@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="/static/css/style.css">
     <style>html { scroll-behavior: smooth; }</style>
 </head>
 <body class="flex flex-col text-base text-gray-200 relative pt-24 bg-slate-900">
@@ -21,27 +21,30 @@
             </h1>
         </div>
         <div class="flex items-center gap-2 md:gap-4 ml-auto z-20 relative bg-[#0f172a]/50 md:bg-transparent rounded-xl p-1 md:p-0 backdrop-blur-sm md:backdrop-filter-none">
-            {% if user.is_authenticated %}
-                <button id="btn-history" class="flex items-center gap-2 text-gray-300 hover:text-white transition px-2 py-2 md:px-3 md:py-1.5 rounded-lg hover:bg-white/10">
-                    <i class="fa-solid fa-clock-rotate-left text-xl md:text-lg"></i>
-                    <span class="hidden md:inline font-bold text-sm">History</span>
-                </button>
-            {% else %}
-                <button onclick="window.location.href='/login'" class="flex items-center gap-2 text-gray-600 hover:text-gray-400 transition px-2 py-2 md:px-3 md:py-1.5 rounded-lg cursor-pointer" title="Log in to view history">
-                    <i class="fa-solid fa-clock-rotate-left text-xl md:text-lg"></i>
-                    <span class="hidden md:inline font-bold text-sm">History</span>
-                </button>
-            {% endif %}
+            <button id="btn-history" class="flex items-center gap-2 text-gray-300 hover:text-white transition px-2 py-2 md:px-3 md:py-1.5 rounded-lg hover:bg-white/10">
+                <i class="fa-solid fa-clock-rotate-left text-xl md:text-lg"></i>
+                <span class="hidden md:inline font-bold text-sm">History</span>
+            </button>
 
-            {% if user.is_authenticated %}
-                <div class="h-6 w-px bg-white/20 mx-1"></div>
-                <span class="text-xs md:text-sm text-gray-400 font-mono max-w-[80px] md:max-w-xs truncate block">{{ user.username }}</span>
-                <a href="/logout" class="bg-red-500/10 text-red-400 border border-red-500/20 px-3 py-1.5 md:px-4 md:py-1.5 rounded-lg text-xs md:text-sm font-bold hover:bg-red-500/20 transition whitespace-nowrap">Logout</a>
-            {% else %}
-                <div class="h-6 w-px bg-white/5 mx-1"></div>
-                <button onclick="window.location.href='/login'" class="text-gray-300 hover:text-white font-bold text-sm transition mr-2">Log In</button>
-                <a href="/signup" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-bold shadow-lg shadow-blue-500/20 transition text-sm">Sign Up</a>
-            {% endif %}
+            <div class="h-6 w-px bg-white/20 mx-1"></div>
+                <span id="username-display"
+                class="text-xs md:text-sm text-gray-400 font-mono max-w-[80px] md:max-w-xs truncate hidden"></span>
+                <button id="logout-btn"
+                class="hidden bg-red-500/10 text-red-400 border border-red-500/20 px-3 py-1.5 md:px-4 md:py-1.5 rounded-lg text-xs md:text-sm font-bold hover:bg-red-500/20 transition whitespace-nowrap">
+                Logout
+                </button>
+
+                <a id="login-link"
+                href="login.html"
+                class="text-gray-300 hover:text-white font-bold text-sm transition mr-2">
+                Log In
+                </a>
+
+                <a id="signup-link"
+                href="signup.html"
+                class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-bold shadow-lg shadow-blue-500/20 transition text-sm">
+                Sign Up
+                </a>
         </div>
     </nav>
 
@@ -369,7 +372,7 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
-    <script src="{{ url_for('static', filename='js/app.js') }}?v=1.4"></script>
+    <script src="/static/js/app.js"></script>
 </body>
 
 </html>

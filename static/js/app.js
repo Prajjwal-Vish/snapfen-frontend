@@ -2,6 +2,36 @@
 console.log("SnapFen App Initialized");
 const API_BASE = "https://snapfen-backend.onrender.com";
 
+async function checkAuth() {
+    try {
+        const res = await fetch(`${API_BASE}/api/history`, {
+            credentials: "include"
+        });
+
+        if (res.status === 401) return;
+
+        document.getElementById("logout-btn")?.classList.remove("hidden");
+        document.getElementById("username-display")?.classList.remove("hidden");
+
+        document.getElementById("login-link")?.classList.add("hidden");
+        document.getElementById("signup-link")?.classList.add("hidden");
+
+    } catch(e) {}
+}
+checkAuth();
+
+const logoutBtn = document.getElementById("logout-btn");
+
+if (logoutBtn) {
+    logoutBtn.addEventListener("click", async () => {
+        await fetch(`${API_BASE}/logout`, {
+            method: "POST",
+            credentials: "include"
+        });
+        location.reload();
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     // --- VARIABLES ---
     let cropper = null;
