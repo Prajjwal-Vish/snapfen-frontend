@@ -1,5 +1,6 @@
 
 console.log("SnapFen App Initialized");
+const API_BASE = "https://snapfen-backend.onrender.com";
 
 document.addEventListener('DOMContentLoaded', () => {
     // --- VARIABLES ---
@@ -190,8 +191,7 @@ document.addEventListener('DOMContentLoaded', () => {
         formData.append('pov', 'w');
         formData.append('is_manual', isManualCrop); 
 
-        fetch('/predict', { method: 'POST', body: formData })
-        .then(res => res.json())
+        fetch(`${API_BASE}/predict`, { method: 'POST', body: formData,credentials: "include" }).then(res => res.json())
         .then(data => { 
             setLoading(false); 
             
@@ -199,7 +199,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if(data.error) {
                 // If backend returns "No chessboard", show a specific alert
                 if (data.error.includes("No chessboard")) {
-                    alert("⚠️ No chessboard found!\n\nPlease use the 'Crop' button to manually select the board.");
+                    alert("No chessboard found!\n\nPlease use the 'Crop' button to manually select the board.");
                 } else {
                     alert("Error: " + data.error);
                 }
@@ -295,7 +295,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- FETCH HISTORY ---
     function fetchHistory() {
         historyList.innerHTML = '<div class="flex flex-col items-center justify-center h-32 text-gray-500 gap-2"><div class="loader w-6 h-6 border-2"></div><span class="text-xs">Loading...</span></div>';
-        fetch('/api/history').then(res => res.json()).then(data => {
+        fetch(`${API_BASE}/api/history`, { credentials: "include" }).then(res => res.json()).then(data => {
             historyList.innerHTML = '';
             if (data.length === 0) { historyList.innerHTML = '<p class="text-gray-500 text-center mt-10 text-sm">No scans yet.</p>'; return; }
             data.forEach(item => {
@@ -339,7 +339,7 @@ document.addEventListener('DOMContentLoaded', () => {
             formData.append('tags', selectedTag);
             formData.append('fen', fenText.value);
             if (currentActiveBlob) formData.append('original_image', currentActiveBlob, 'original.png');
-            fetch('/report_issue', { method: 'POST', body: formData }).then(res => res.json()).then(() => {
+            fetch(`${API_BASE}/report_issue`, { method: 'POST', body: formData,credentials: "include" }).then(res => res.json()).then(() => {
                 btnSubmitFeedback.innerText = "Sent!";
                 setTimeout(() => { feedbackModal.classList.add('hidden'); btnSubmitFeedback.innerHTML = originalHTML; btnSubmitFeedback.disabled = false; document.getElementById('feedback-text').value = ''; }, 1500);
             });
@@ -368,7 +368,7 @@ document.addEventListener('DOMContentLoaded', () => {
             formData.append('feedback', text);
             formData.append('tags', "General Bug");
             if (file) formData.append('attachment', file);
-            fetch('/report_issue', { method: 'POST', body: formData }).then(res => res.json()).then(() => {
+            fetch(`${API_BASE}/report_issue`, { method: 'POST', body: formData,credentials: "include" }).then(res => res.json()).then(() => {
                 btnSubmitBug.innerText = "Report Sent!";
                 setTimeout(() => { bugModal.classList.add('hidden'); btnSubmitBug.innerHTML = originalHTML; btnSubmitBug.disabled = false; document.getElementById('bug-text').value = ''; }, 1500);
             }).catch(err => { console.error(err); btnSubmitBug.innerText = "Error"; setTimeout(() => { btnSubmitBug.disabled = false; btnSubmitBug.innerHTML = originalHTML; }, 2000); });
