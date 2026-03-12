@@ -325,9 +325,23 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- FETCH HISTORY ---
     function fetchHistory() {
         historyList.innerHTML = '<div class="flex flex-col items-center justify-center h-32 text-gray-500 gap-2"><div class="loader w-6 h-6 border-2"></div><span class="text-xs">Loading...</span></div>';
-        fetch(`${API_BASE}/api/history`, { credentials: "include" }).then(res => res.json()).then(data => {
+        
+        fetch(`${API_BASE}/api/history`, { credentials: "include" })
+        .then(res => {
+            // --- THE REDIRECT LOGIC ---
+            if (res.status === 401) {
+                // Redirect to your login page (Update this path if your login page is named differently)
+                window.location.href = '/login.html'; 
+                throw new Error('User not authenticated, redirecting...');
+            }
+            return res.json();
+        })
+        .then(data => {
             historyList.innerHTML = '';
-            if (data.length === 0) { historyList.innerHTML = '<p class="text-gray-500 text-center mt-10 text-sm">No scans yet.</p>'; return; }
+            if (data.length === 0) { 
+                historyList.innerHTML = '<p class="text-gray-500 text-center mt-10 text-sm">No scans yet.</p>'; 
+                return; 
+            }
             data.forEach(item => {
                 const div = document.createElement('div');
                 div.className = 'p-3 bg-white/5 rounded-xl border border-white/10 hover:bg-white/10 cursor-pointer transition group flex gap-3 items-center';
@@ -335,7 +349,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 div.addEventListener('click', () => { rawFenBase = item.fen; showResult(item.image); closeHistory(); });
                 historyList.appendChild(div);
             });
-        }).catch(err => { console.error(err); historyList.innerHTML = '<p class="text-red-400 text-center mt-4 text-xs">Failed to load history.</p>'; });
+        })
+        .catch(err => { 
+            console.error(err); 
+            // Only show the red error text if it wasn't our intentional redirect
+            if (err.message !== 'User not authenticated, redirecting...') {
+                historyList.innerHTML = '<p class="text-red-400 text-center mt-4 text-xs">Failed to load history.</p>'; 
+            }
+        });
     }
 
     // --- MODAL LOGIC (Floating vs Footer) ---
