@@ -1,13 +1,5 @@
 console.log("SnapFen App Initialized");
 
-// ─────────────────────────────────────────────────────────────
-// AUTH HELPERS
-// These functions handle everything JWT related.
-// API_BASE comes from config.js which must be loaded before this file.
-// ─────────────────────────────────────────────────────────────
-
-// Read the token from localStorage
-// Returns the token string, or null if not logged in
 function getToken() {
     return localStorage.getItem('snapfen_token');
 }
@@ -291,48 +283,6 @@ document.addEventListener('DOMContentLoaded', () => {
             cancelCropping();
         }, 'image/png');
     }
-
-    // --- BACKEND SEND ---
-    // Uses authFetch so logged-in users get their scan saved automatically
-    // Anonymous users still get the FEN result — backend handles both cases
-    // function sendToBackend(fileBlob, fileName) {
-    //     setLoading(true);
-
-    //     const formData = new FormData();
-    //     formData.append('file', fileBlob, fileName);
-    //     formData.append('pov', 'w');
-    //     formData.append('is_manual', isManualCrop);
-
-    //     // authFetch attaches Authorization header if user is logged in
-    //     // backend uses verify_jwt_in_request(optional=True) so it works
-    //     // for both logged-in and anonymous users
-    //     authFetch(`${window.API_BASE}/predict`, {
-    //         method: 'POST',
-    //         body: formData
-    //         // DO NOT set Content-Type here — FormData sets it automatically
-    //         // with the correct boundary value for file uploads
-    //     })
-    //     .then(res => res.json())
-    //     .then(data => {
-    //         setLoading(false);
-
-    //         if (data.error) {
-    //             if (data.error.includes("No chessboard")) {
-    //                 alert("No chessboard found!\n\nPlease use the 'Crop' button to manually select the board.");
-    //             } else {
-    //                 alert("Error: " + data.error);
-    //             }
-    //         } else {
-    //             rawFenBase = data.fen;
-    //             showResult(data.cropped_image);
-    //         }
-    //     })
-    //     .catch(err => {
-    //         setLoading(false);
-    //         console.error(err);
-    //         alert("Server Error. Check console.");
-    //     });
-    // }
 
     function sendToBackend(fileBlob, fileName) {
         setLoading(true);

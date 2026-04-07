@@ -5,7 +5,7 @@ const isLocal = window.location.hostname === 'localhost'
 
 const API_BASE = isLocal 
     ? 'http://localhost:5000' 
-    : 'https://snapfen-backend.onrender.com';
+    : 'https://gererate-fen-notation-from-chess.onrender.com';
 
 // Export for other scripts
 window.API_BASE = API_BASE;
