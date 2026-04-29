@@ -286,13 +286,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function sendToBackend(fileBlob, fileName) {
         setLoading(true);
-    
+
         const formData = new FormData();
         formData.append("file", fileBlob, fileName);
-        formData.append("pov", "w");
+        formData.append("pov", povToggle.checked ? "b" : "w");
         formData.append("is_manual", isManualCrop);
-    
-        // Step 1: POST the image → get back a task_id immediately
+
+        // Direct POST — waits for response (no polling needed)
         authFetch(`${window.API_BASE}/predict`, {
             method: "POST",
             body: formData,
@@ -302,13 +302,13 @@ document.addEventListener('DOMContentLoaded', () => {
             return res.json();
         })
         .then(data => {
-            // data = { task_id: "abc-123-..." }
-            // Start polling for the result
-            pollForResult(data.task_id);
+            setLoading(false);
+            rawFenBase = data.fen;
+            showResult(data.cropped_image);
         })
         .catch(err => {
             setLoading(false);
-            showError(err.error || "Could not reach server. Check your connection.");
+            showError(err.error || "Could not reach server.");
         });
     }
 
@@ -493,6 +493,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (base64Image) analyzedPreview.src = base64Image;
         updateGlobalFen();
         btnQuickScan.classList.add('btn-disabled', 'opacity-50');
+        const analyzeBtn = document.getElementById("btn-analyze");
+        if (analyzeBtn && rawFenBase) {
+            analyzeBtn.href = `analysis.html?fen=${encodeURIComponent(rawFenBase)}`;
+        }
     }
 
     function resetResults() {

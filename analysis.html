@@ -1,0 +1,1204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analysis Board — SnapFen</title>
+
+    <!-- Tailwind -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- chessboard.js — the board UI -->
+    <link rel="stylesheet"
+          href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
+
+    <!-- Font Awesome -->
+    <link rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+
+    <!-- Google Fonts — Outfit for UI, JetBrains Mono for FEN/PGN -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <style>
+        /* ── Root variables — matches SnapFen's dark slate palette ── */
+        :root {
+            --bg-primary:    #0f172a;
+            --bg-secondary:  #1a1c2c;
+            --bg-panel:      #141520;
+            --bg-card:       rgba(255,255,255,0.04);
+            --border:        rgba(255,255,255,0.08);
+            --border-hover:  rgba(255,255,255,0.16);
+            --text-primary:  #e2e8f0;
+            --text-muted:    #64748b;
+            --text-dim:      #334155;
+            --accent-blue:   #3b82f6;
+            --accent-purple: #8b5cf6;
+            --eval-white:    #f1f5f9;
+            --eval-black:    #1e293b;
+            --positive:      #22c55e;
+            --negative:      #ef4444;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* ── Nav ── */
+        .analysis-nav {
+            position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+            height: 56px;
+            background: rgba(10, 14, 26, 0.95);
+            backdrop-filter: blur(16px);
+            border-bottom: 1px solid var(--border);
+            display: flex; align-items: center;
+            padding: 0 20px; gap: 16px;
+        }
+        .nav-logo {
+            font-size: 18px; font-weight: 700;
+            background: linear-gradient(135deg, #60a5fa, #a78bfa);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            text-decoration: none;
+        }
+        .nav-divider {
+            width: 1px; height: 20px;
+            background: var(--border);
+        }
+        .nav-title {
+            font-size: 14px; color: var(--text-muted); font-weight: 400;
+        }
+
+        /* ── Main layout ── */
+        .analysis-layout {
+            margin-top: 56px;
+            display: grid;
+            grid-template-columns: auto 1fr 300px;
+            grid-template-rows: 1fr;
+            min-height: calc(100vh - 56px);
+            gap: 0;
+        }
+
+        /* ── Eval bar (left column) ── */
+        .eval-column {
+            width: 32px;
+            display: flex;
+            align-items: stretch;
+            padding: 16px 8px;
+            background: var(--bg-panel);
+            border-right: 1px solid var(--border);
+        }
+        .eval-bar-wrapper {
+            width: 16px;
+            flex: 1;
+            border-radius: 8px;
+            overflow: hidden;
+            background: var(--bg-secondary);
+            position: relative;
+        }
+        .eval-bar-white {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            background: var(--eval-white);
+            transition: height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            border-radius: 0 0 8px 8px;
+        }
+        .eval-score {
+            position: absolute;
+            left: 22px; bottom: 8px;
+            font-size: 10px; font-weight: 600;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+            writing-mode: vertical-rl;
+            text-orientation: mixed;
+            transform: rotate(180deg);
+        }
+
+        /* ── Board column ── */
+        .board-column {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            background: var(--bg-panel);
+            gap: 12px;
+        }
+
+        /* Player info strips above/below board */
+        .player-strip {
+            width: 100%;
+            max-width: 520px;
+            display: flex; align-items: center; gap: 10px;
+            padding: 8px 12px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+        }
+        .player-avatar {
+            width: 32px; height: 32px;
+            border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 14px; font-weight: 700;
+        }
+        .player-avatar.white { background: #f8fafc; color: #0f172a; }
+        .player-avatar.black { background: #1e293b; color: #f8fafc; border: 1px solid var(--border); }
+        .player-name { font-size: 14px; font-weight: 500; flex: 1; }
+        .player-clock {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px; font-weight: 500;
+            color: var(--text-muted);
+        }
+
+        /* Board container */
+        #board-container {
+            width: 100%;
+            max-width: 520px;
+            position: relative;
+        }
+        #board { width: 100%; }
+
+        /* Arrow overlay canvas sits exactly on top of board */
+        #arrow-canvas {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        /* chessboard.js overrides for our dark theme */
+        .board-b72b1 { border-radius: 4px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.6); }
+        .square-55d63 { transition: background-color 0.1s; }
+
+        /* Highlight squares (legal moves, last move, selected) */
+        .highlight-legal   { background: radial-gradient(circle, rgba(20,85,30,0.5) 25%, transparent 25%) !important; }
+        .highlight-selected{ box-shadow: inset 0 0 0 3px rgba(20,85,30,0.8) !important; }
+        .highlight-lastmove{ background: rgba(205,210,106,0.5) !important; }
+        .highlight-check   { background: rgba(220,30,30,0.6) !important; }
+
+        /* Board controls strip */
+        .board-controls {
+            display: flex; gap: 8px; align-items: center;
+            width: 100%; max-width: 520px;
+        }
+        .ctrl-btn {
+            display: flex; align-items: center; justify-content: center;
+            width: 36px; height: 36px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--bg-card);
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.15s;
+            font-size: 13px;
+        }
+        .ctrl-btn:hover { border-color: var(--border-hover); color: var(--text-primary); }
+        .ctrl-btn:active { transform: scale(0.95); }
+        .ctrl-spacer { flex: 1; }
+        .flip-btn {
+            display: flex; align-items: center; gap: 6px;
+            padding: 0 12px; height: 36px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--bg-card);
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 12px; font-weight: 500;
+            font-family: 'Outfit', sans-serif;
+            transition: all 0.15s;
+        }
+        .flip-btn:hover { border-color: var(--border-hover); color: var(--text-primary); }
+
+        /* ── Right panel ── */
+        .right-panel {
+            width: 300px;
+            background: var(--bg-secondary);
+            border-left: 1px solid var(--border);
+            display: flex; flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Panel section header */
+        .panel-header {
+            padding: 14px 16px 10px;
+            font-size: 10px; font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase; letter-spacing: 0.08em;
+            border-bottom: 1px solid var(--border);
+        }
+
+        /* ── Engine info section ── */
+        .engine-section { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+
+        .engine-status {
+            display: flex; align-items: center; gap: 8px;
+            margin-bottom: 10px;
+        }
+        .engine-dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: var(--text-dim);
+            transition: background 0.3s;
+        }
+        .engine-dot.ready  { background: var(--positive); box-shadow: 0 0 6px var(--positive); }
+        .engine-dot.thinking { background: var(--accent-blue); animation: pulse 1s infinite; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        .engine-label { font-size: 12px; color: var(--text-muted); }
+
+        /* Best move display */
+        .best-move-display {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px 12px;
+            margin-bottom: 10px;
+        }
+        .best-move-label { font-size: 10px; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.06em; }
+        .best-move-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 18px; font-weight: 500;
+            color: var(--text-primary);
+        }
+        .best-move-line {
+            font-size: 11px; color: var(--text-muted); margin-top: 3px;
+            font-family: 'JetBrains Mono', monospace;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+
+        /* Eval score */
+        .eval-display {
+            display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
+        }
+        .eval-number {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 24px; font-weight: 600;
+        }
+        .eval-number.positive { color: var(--eval-white); }
+        .eval-number.negative { color: #94a3b8; }
+        .eval-number.mate     { color: var(--accent-blue); }
+        .eval-depth {
+            font-size: 11px; color: var(--text-muted);
+        }
+
+        /* ── Engine config ── */
+        .config-section { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+
+        .config-row {
+            display: flex; align-items: center; gap: 10px;
+            margin-bottom: 10px;
+        }
+        .config-label { font-size: 12px; color: var(--text-muted); width: 56px; flex-shrink: 0; }
+        .config-slider {
+            flex: 1;
+            -webkit-appearance: none;
+            height: 4px;
+            border-radius: 2px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            outline: none;
+        }
+        .config-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px; height: 14px;
+            border-radius: 50%;
+            background: var(--accent-blue);
+            cursor: pointer;
+            border: 2px solid var(--bg-secondary);
+            box-shadow: 0 0 4px rgba(59,130,246,0.5);
+        }
+        .config-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px; color: var(--text-primary);
+            width: 28px; text-align: right; flex-shrink: 0;
+        }
+
+        /* Engine toggle */
+        .engine-toggle {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        .toggle-label { font-size: 12px; color: var(--text-muted); }
+        .toggle-switch {
+            position: relative; width: 36px; height: 20px;
+            display: inline-block;
+        }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-track {
+            position: absolute; inset: 0;
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: 10px; cursor: pointer; transition: background 0.2s;
+        }
+        .toggle-track::after {
+            content: ''; position: absolute;
+            width: 14px; height: 14px; border-radius: 50%;
+            background: var(--text-muted); top: 2px; left: 2px;
+            transition: transform 0.2s, background 0.2s;
+        }
+        .toggle-switch input:checked + .toggle-track { background: rgba(59,130,246,0.2); border-color: var(--accent-blue); }
+        .toggle-switch input:checked + .toggle-track::after { transform: translateX(16px); background: var(--accent-blue); }
+
+        /* ── Move list ── */
+        .movelist-section {
+            flex: 1; overflow-y: auto;
+            padding: 8px;
+        }
+        .movelist-section::-webkit-scrollbar { width: 4px; }
+        .movelist-section::-webkit-scrollbar-track { background: transparent; }
+        .movelist-section::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+        .move-pair {
+            display: grid;
+            grid-template-columns: 28px 1fr 1fr;
+            gap: 2px; margin-bottom: 2px;
+        }
+        .move-number {
+            font-size: 11px; color: var(--text-dim);
+            font-family: 'JetBrains Mono', monospace;
+            display: flex; align-items: center; padding: 4px 4px;
+        }
+        .move-btn {
+            padding: 4px 8px; border-radius: 5px;
+            border: none; background: transparent; cursor: pointer;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px; color: var(--text-primary);
+            text-align: left;
+            transition: background 0.1s;
+        }
+        .move-btn:hover { background: var(--bg-card); }
+        .move-btn.active { background: var(--accent-blue); color: white; }
+        .move-btn.empty  { color: transparent; cursor: default; }
+
+        /* ── FEN input ── */
+        .fen-section { padding: 12px 16px; border-top: 1px solid var(--border); }
+        .fen-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+        .fen-input-row { display: flex; gap: 6px; }
+        .fen-input {
+            flex: 1;
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: 6px; padding: 6px 8px;
+            color: var(--text-primary);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px; outline: none;
+            transition: border-color 0.15s;
+        }
+        .fen-input:focus { border-color: var(--accent-blue); }
+        .fen-load-btn {
+            padding: 6px 10px; border-radius: 6px;
+            background: var(--accent-blue); border: none;
+            color: white; cursor: pointer;
+            font-size: 11px; font-weight: 600;
+            font-family: 'Outfit', sans-serif;
+            transition: opacity 0.15s;
+        }
+        .fen-load-btn:hover { opacity: 0.85; }
+
+        /* ── Theme picker ── */
+        .theme-section { padding: 12px 16px; border-top: 1px solid var(--border); }
+        .theme-swatches { display: flex; gap: 6px; flex-wrap: wrap; }
+        .theme-swatch {
+            width: 28px; height: 28px; border-radius: 6px;
+            cursor: pointer; border: 2px solid transparent;
+            overflow: hidden; display: grid; grid-template-columns: 1fr 1fr;
+            transition: border-color 0.15s, transform 0.15s;
+        }
+        .theme-swatch:hover { transform: scale(1.1); }
+        .theme-swatch.active { border-color: var(--accent-blue); }
+        .swatch-half { display: block; }
+
+        /* ── Mobile responsive ── */
+        @media (max-width: 900px) {
+            .analysis-layout {
+                grid-template-columns: 20px 1fr;
+                grid-template-rows: auto 1fr;
+            }
+            .right-panel {
+                grid-column: 1 / -1;
+                width: 100%;
+                border-left: none; border-top: 1px solid var(--border);
+                max-height: 360px;
+            }
+            .eval-column { width: 20px; padding: 16px 4px; }
+            .eval-score { display: none; }
+        }
+
+        @media (max-width: 600px) {
+            .board-column { padding: 12px; }
+        }
+
+        /* ── Animations ── */
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(8px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .fade-in { animation: fadeInUp 0.3s ease-out forwards; }
+    </style>
+</head>
+<body>
+
+<!-- ── Navigation ──────────────────────────────────────────────────────────── -->
+<nav class="analysis-nav">
+    <a href="index.html" class="nav-logo">
+        <i class="fa-solid fa-chess-knight mr-1"></i>SnapFen
+    </a>
+    <div class="nav-divider"></div>
+    <span class="nav-title">Analysis Board</span>
+    <div style="flex:1"></div>
+    <button onclick="window.history.back()"
+            style="background:none;border:1px solid var(--border);border-radius:8px;
+                   padding:6px 12px;color:var(--text-muted);cursor:pointer;
+                   font-size:12px;font-family:'Outfit',sans-serif">
+        <i class="fa-solid fa-arrow-left mr-1"></i>Back
+    </button>
+</nav>
+
+<!-- ── Main layout ──────────────────────────────────────────────────────────── -->
+<div class="analysis-layout">
+
+    <!-- Eval bar column -->
+    <div class="eval-column">
+        <div style="position:relative;flex:1;display:flex;flex-direction:column">
+            <div class="eval-bar-wrapper" id="eval-bar-wrapper">
+                <div class="eval-bar-white" id="eval-bar-white" style="height:50%"></div>
+            </div>
+            <div class="eval-score" id="eval-score-side">0.0</div>
+        </div>
+    </div>
+
+    <!-- Board column -->
+    <div class="board-column">
+
+        <!-- Black player strip -->
+        <div class="player-strip" id="player-top">
+            <div class="player-avatar black">B</div>
+            <span class="player-name" id="player-black-name">Black</span>
+            <span class="player-clock" id="clock-black">—</span>
+        </div>
+
+        <!-- Board + arrow canvas -->
+        <div id="board-container">
+            <div id="board"></div>
+            <canvas id="arrow-canvas"></canvas>
+        </div>
+
+        <!-- White player strip -->
+        <div class="player-strip" id="player-bottom">
+            <div class="player-avatar white">W</div>
+            <span class="player-name" id="player-white-name">White</span>
+            <span class="player-clock" id="clock-white">—</span>
+        </div>
+
+        <!-- Board controls -->
+        <div class="board-controls">
+            <button class="ctrl-btn" id="btn-start" title="Start position">
+                <i class="fa-solid fa-backward-step"></i>
+            </button>
+            <button class="ctrl-btn" id="btn-prev" title="Previous move">
+                <i class="fa-solid fa-chevron-left"></i>
+            </button>
+            <button class="ctrl-btn" id="btn-next" title="Next move">
+                <i class="fa-solid fa-chevron-right"></i>
+            </button>
+            <button class="ctrl-btn" id="btn-end" title="Last move">
+                <i class="fa-solid fa-forward-step"></i>
+            </button>
+            <div class="ctrl-spacer"></div>
+            <button class="flip-btn" id="btn-flip">
+                <i class="fa-solid fa-rotate"></i> Flip
+            </button>
+        </div>
+    </div>
+
+    <!-- Right panel -->
+    <div class="right-panel fade-in">
+
+        <!-- Engine section -->
+        <div class="panel-header">Engine Analysis</div>
+        <div class="engine-section">
+            <div class="engine-status">
+                <div class="engine-dot" id="engine-dot"></div>
+                <span class="engine-label" id="engine-label">Loading engine…</span>
+            </div>
+
+            <div class="eval-display">
+                <div class="eval-number positive" id="eval-number">0.0</div>
+                <div class="eval-depth" id="eval-depth">depth —</div>
+            </div>
+
+            <div class="best-move-display">
+                <div class="best-move-label">Best move</div>
+                <div class="best-move-value" id="best-move-san">—</div>
+                <div class="best-move-line" id="best-move-line">Waiting for engine…</div>
+            </div>
+        </div>
+
+        <!-- Engine config section -->
+        <div class="config-section">
+            <div class="config-row">
+                <span class="config-label">Depth</span>
+                <input type="range" class="config-slider" id="depth-slider"
+                       min="5" max="30" value="18">
+                <span class="config-value" id="depth-value">18</span>
+            </div>
+            <div class="config-row">
+                <span class="config-label">Threads</span>
+                <input type="range" class="config-slider" id="threads-slider"
+                       min="1" max="4" value="1">
+                <span class="config-value" id="threads-value">1</span>
+            </div>
+            <div class="engine-toggle">
+                <span class="toggle-label">Auto-analyze on move</span>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="auto-analyze" checked>
+                    <span class="toggle-track"></span>
+                </label>
+            </div>
+            <div class="engine-toggle">
+                <span class="toggle-label">Show best move arrow</span>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="show-arrow" checked>
+                    <span class="toggle-track"></span>
+                </label>
+            </div>
+        </div>
+
+        <!-- Move list -->
+        <div class="panel-header" style="border-top:1px solid var(--border)">Move List</div>
+        <div class="movelist-section" id="move-list">
+            <p style="font-size:12px;color:var(--text-muted);padding:8px">
+                No moves yet. Make a move or load a FEN.
+            </p>
+        </div>
+
+        <!-- FEN input -->
+        <div class="fen-section">
+            <div class="fen-label">Load position (FEN)</div>
+            <div class="fen-input-row">
+                <input type="text" class="fen-input" id="fen-input"
+                       placeholder="Paste FEN string here…">
+                <button class="fen-load-btn" id="fen-load-btn">Load</button>
+            </div>
+        </div>
+
+        <!-- Board theme picker -->
+        <div class="theme-section">
+            <div class="fen-label" style="margin-bottom:8px">Board theme</div>
+            <div class="theme-swatches" id="theme-swatches"></div>
+        </div>
+
+    </div>
+</div>
+
+<!-- ── Scripts ──────────────────────────────────────────────────────────────── -->
+<!-- jQuery (required by chessboard.js) -->
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+
+<!-- chessboard.js -->
+<script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
+
+<!-- chess.js — move validation, PGN, FEN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+
+<!-- Config (sets window.API_BASE) -->
+<script src="config.js"></script>
+<script src="auth.js"></script>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════════
+// ANALYSIS BOARD — main controller
+// All modules are in this single script for zero build-step simplicity.
+// When complexity grows, each section can be extracted to its own .js file.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ── State ─────────────────────────────────────────────────────────────────────
+const state = {
+    chess: new Chess(),          // chess.js instance — single source of truth for position
+    board: null,                 // chessboard.js instance
+    worker: null,                // Stockfish Web Worker
+    engineReady: false,          // true once Stockfish sends "readyok"
+    currentTheme: "classic",     // active board theme key
+    moveHistory: [],             // array of {san, fen, from, to} for each move
+    currentMoveIndex: -1,        // which move we're viewing (-1 = starting position)
+    orientation: "white",        // "white" or "black"
+    bestMoveUci: null,           // current best move in UCI format ("e2e4")
+    autoAnalyze: true,           // analyze after every move
+    showArrow: true,             // draw best move arrow
+};
+
+// Board themes (embedded for zero import complexity)
+const BOARD_THEMES = {
+    classic: { name:"Classic",  light:"#f0d9b5", dark:"#b58863" },
+    ocean:   { name:"Ocean",    light:"#dee3e6", dark:"#8ca2ad" },
+    forest:  { name:"Forest",   light:"#ffffdd", dark:"#86a666" },
+    midnight:{ name:"Midnight", light:"#3d3d3d", dark:"#1a1a1a" },
+    purple:  { name:"Purple",   light:"#e8d5f5", dark:"#7b4fa6" },
+};
+
+// ── Engine worker ──────────────────────────────────────────────────────────────
+function initEngine() {
+    updateEngineStatus("loading");
+
+    try {
+        // Load Stockfish directly in a blob URL — avoids CORS issues with CDN workers
+        const workerCode = `
+            importScripts("https://cdn.jsdelivr.net/npm/stockfish@16.0.0/src/stockfish-nnue-16.js");
+            let engine = null, isReady = false;
+
+            function initSF() {
+                engine = Stockfish();
+                engine.addMessageListener(line => {
+                    if (line === "readyok") { isReady = true; self.postMessage({type:"ready"}); return; }
+                    if (line.startsWith("info") && line.includes("score")) {
+                        const p = parseInfo(line);
+                        if (p) self.postMessage({type:"info",...p});
+                        return;
+                    }
+                    if (line.startsWith("bestmove")) {
+                        const m = line.split(" ")[1];
+                        if (m && m !== "(none)") self.postMessage({type:"bestmove",move:m});
+                        return;
+                    }
+                });
+                engine.postMessage("uci");
+                engine.postMessage("setoption name Hash value 32");
+                engine.postMessage("isready");
+            }
+
+            function parseInfo(line) {
+                const p = line.split(" ");
+                let depth=0, score=0, scoreType="cp", pv=[], i=0;
+                while(i<p.length) {
+                    if(p[i]==="depth") depth=parseInt(p[++i])||0;
+                    else if(p[i]==="score") { scoreType=p[++i]; score=parseInt(p[++i])||0; }
+                    else if(p[i]==="pv") { pv=p.slice(i+1); i=p.length; }
+                    i++;
+                }
+                return depth ? {depth,score,scoreType,pv} : null;
+            }
+
+            self.onmessage = e => {
+                const m = e.data;
+                if(m.type==="analyze") {
+                    engine.postMessage("stop");
+                    engine.postMessage("ucinewgame");
+                    engine.postMessage("position fen "+m.fen);
+                    engine.postMessage("go depth "+(m.depth||18));
+                }
+                else if(m.type==="stop") engine.postMessage("stop");
+                else if(m.type==="setoption") engine.postMessage("setoption name "+m.name+" value "+m.value);
+            };
+
+            initSF();
+        `;
+
+        const blob = new Blob([workerCode], { type: "application/javascript" });
+        state.worker = new Worker(URL.createObjectURL(blob));
+
+        state.worker.onmessage = handleWorkerMessage;
+        state.worker.onerror = (e) => {
+            console.error("[Engine] Worker error:", e);
+            updateEngineStatus("error");
+        };
+
+    } catch (err) {
+        console.error("[Engine] Failed to create worker:", err);
+        updateEngineStatus("error");
+    }
+}
+
+function handleWorkerMessage(e) {
+    const msg = e.data;
+
+    if (msg.type === "ready") {
+        state.engineReady = true;
+        updateEngineStatus("ready");
+        // Analyze starting position (or URL FEN)
+        triggerAnalysis();
+        return;
+    }
+
+    if (msg.type === "info") {
+        updateEvalDisplay(msg.score, msg.scoreType, msg.depth);
+        if (msg.pv && msg.pv.length > 0) {
+            state.bestMoveUci = msg.pv[0];
+            updateBestMoveDisplay(msg.pv, msg.depth);
+        }
+        return;
+    }
+
+    if (msg.type === "bestmove") {
+        state.bestMoveUci = msg.move;
+        if (state.showArrow) drawBestMoveArrow(msg.move);
+        updateEngineStatus("ready");
+    }
+}
+
+function triggerAnalysis() {
+    if (!state.engineReady || !state.autoAnalyze) return;
+    updateEngineStatus("thinking");
+    clearArrow();
+    const depth = parseInt(document.getElementById("depth-slider").value) || 18;
+    state.worker.postMessage({ type: "analyze", fen: state.chess.fen(), depth });
+}
+
+// ── Engine UI updates ──────────────────────────────────────────────────────────
+function updateEngineStatus(status) {
+    const dot   = document.getElementById("engine-dot");
+    const label = document.getElementById("engine-label");
+    dot.className = "engine-dot";
+    if (status === "ready")    { dot.classList.add("ready");    label.textContent = "Stockfish 16 · ready"; }
+    if (status === "thinking") { dot.classList.add("thinking"); label.textContent = "Stockfish 16 · thinking…"; }
+    if (status === "loading")  { label.textContent = "Loading engine…"; }
+    if (status === "error")    { label.textContent = "Engine unavailable"; }
+}
+
+function updateEvalDisplay(score, type, depth) {
+    const numEl   = document.getElementById("eval-number");
+    const depthEl = document.getElementById("eval-depth");
+    const sideEl  = document.getElementById("eval-score-side");
+    const barEl   = document.getElementById("eval-bar-white");
+
+    if (type === "mate") {
+        const sign = score > 0 ? "+" : "";
+        numEl.textContent = `M${sign}${score}`;
+        numEl.className = "eval-number mate";
+        barEl.style.height = score > 0 ? "95%" : "5%";
+        sideEl.textContent = `M${score}`;
+    } else {
+        // Centipawn score: +100 = 1 pawn advantage for white
+        const pawns = (score / 100).toFixed(1);
+        const sign  = score > 0 ? "+" : "";
+        numEl.textContent = `${sign}${pawns}`;
+        numEl.className   = `eval-number ${score >= 0 ? "positive" : "negative"}`;
+        sideEl.textContent = `${sign}${pawns}`;
+
+        // Convert score to bar percentage (50% = equal, capped at 95/5)
+        const clamped = Math.max(-600, Math.min(600, score));
+        const pct = 50 + (clamped / 600) * 45;
+        barEl.style.height = `${pct}%`;
+    }
+
+    depthEl.textContent = `depth ${depth}`;
+}
+
+function updateBestMoveDisplay(pv, depth) {
+    const chess2 = new Chess(state.chess.fen());
+    let sanMove = "—";
+    let line    = "";
+
+    // Convert first UCI move to SAN
+    if (pv[0]) {
+        const from = pv[0].slice(0, 2);
+        const to   = pv[0].slice(2, 4);
+        const promo = pv[0][4] || undefined;
+        const move = chess2.move({ from, to, promotion: promo });
+        if (move) sanMove = move.san;
+    }
+
+    // Show next 4 moves of the principal variation
+    for (let i = 1; i < Math.min(pv.length, 5); i++) {
+        const m = chess2.move({
+            from: pv[i].slice(0, 2),
+            to:   pv[i].slice(2, 4),
+            promotion: pv[i][4] || undefined,
+        });
+        if (m) line += m.san + " ";
+    }
+
+    document.getElementById("best-move-san").textContent  = sanMove;
+    document.getElementById("best-move-line").textContent = line.trim() || "…";
+}
+
+// ── Arrow drawing ──────────────────────────────────────────────────────────────
+// Draws the engine's best move arrow on the canvas overlay
+function drawBestMoveArrow(uciMove) {
+    if (!uciMove || uciMove.length < 4) return;
+    const canvas = document.getElementById("arrow-canvas");
+    const board  = document.getElementById("board");
+    const ctx    = canvas.getContext("2d");
+
+    canvas.width  = board.offsetWidth;
+    canvas.height = board.offsetHeight;
+
+    const sqSize = canvas.width / 8;
+
+    function squareToXY(sq) {
+        // sq = "e4" → col 4, row 4 (from white's perspective)
+        const files = "abcdefgh";
+        const col = files.indexOf(sq[0]);
+        const row = 8 - parseInt(sq[1]);
+
+        // Flip if board is oriented black side up
+        const c = state.orientation === "white" ? col : 7 - col;
+        const r = state.orientation === "white" ? row : 7 - row;
+
+        return {
+            x: c * sqSize + sqSize / 2,
+            y: r * sqSize + sqSize / 2,
+        };
+    }
+
+    const from = squareToXY(uciMove.slice(0, 2));
+    const to   = squareToXY(uciMove.slice(2, 4));
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw arrow shaft
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.lineTo(to.x, to.y);
+    ctx.strokeStyle = "rgba(50, 180, 100, 0.85)";
+    ctx.lineWidth   = sqSize * 0.16;
+    ctx.lineCap     = "round";
+    ctx.stroke();
+
+    // Draw arrowhead
+    const angle  = Math.atan2(to.y - from.y, to.x - from.x);
+    const aSize  = sqSize * 0.32;
+    ctx.beginPath();
+    ctx.moveTo(to.x, to.y);
+    ctx.lineTo(
+        to.x - aSize * Math.cos(angle - Math.PI / 6),
+        to.y - aSize * Math.sin(angle - Math.PI / 6)
+    );
+    ctx.lineTo(
+        to.x - aSize * Math.cos(angle + Math.PI / 6),
+        to.y - aSize * Math.sin(angle + Math.PI / 6)
+    );
+    ctx.closePath();
+    ctx.fillStyle = "rgba(50, 180, 100, 0.95)";
+    ctx.fill();
+}
+
+function clearArrow() {
+    const canvas = document.getElementById("arrow-canvas");
+    const ctx    = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+// ── Board setup ────────────────────────────────────────────────────────────────
+function initBoard(fen) {
+    const theme = BOARD_THEMES[state.currentTheme];
+
+    state.board = Chessboard("board", {
+        position:     fen || "start",
+        draggable:    true,
+        pieceTheme:   "https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png",
+        orientation:  state.orientation,
+        onDragStart:  onDragStart,
+        onDrop:       onDrop,
+        onSnapEnd:    onSnapEnd,
+        onMouseoverSquare: onMouseoverSquare,
+        onMouseoutSquare:  onMouseoutSquare,
+    });
+
+    applyThemeColors(state.currentTheme);
+    resizeCanvas();
+}
+
+function onDragStart(source, piece) {
+    // Only allow dragging pieces that belong to the side to move
+    if (state.chess.game_over()) return false;
+    if (state.currentMoveIndex < state.moveHistory.length - 1) return false; // navigating history
+    if (piece.startsWith("b") && state.chess.turn() === "w") return false;
+    if (piece.startsWith("w") && state.chess.turn() === "b") return false;
+
+    // Highlight legal moves for this piece
+    highlightLegalMoves(source);
+    return true;
+}
+
+function onDrop(source, target) {
+    removeHighlights();
+
+    const move = state.chess.move({
+        from:      source,
+        to:        target,
+        promotion: "q", // always promote to queen for simplicity
+    });
+
+    if (move === null) return "snapback"; // illegal move
+
+    // Record the move
+    state.moveHistory = state.moveHistory.slice(0, state.currentMoveIndex + 1);
+    state.moveHistory.push({
+        san:  move.san,
+        fen:  state.chess.fen(),
+        from: source,
+        to:   target,
+    });
+    state.currentMoveIndex = state.moveHistory.length - 1;
+
+    highlightLastMove(source, target);
+    renderMoveList();
+
+    if (state.autoAnalyze) {
+        setTimeout(triggerAnalysis, 100); // small delay for board to settle
+    }
+}
+
+function onSnapEnd() {
+    state.board.position(state.chess.fen());
+}
+
+function onMouseoverSquare(square) {
+    // Show dots on legal move targets when hovering a piece
+    const moves = state.chess.moves({ square, verbose: true });
+    if (moves.length === 0) return;
+    moves.forEach(m => {
+        document.querySelector(`.square-${m.to}`)?.classList.add("highlight-legal");
+    });
+}
+
+function onMouseoutSquare() {
+    document.querySelectorAll(".highlight-legal").forEach(el => {
+        el.classList.remove("highlight-legal");
+    });
+}
+
+// ── Square highlights ──────────────────────────────────────────────────────────
+function highlightLegalMoves(square) {
+    removeHighlights();
+    document.querySelector(`.square-${square}`)?.classList.add("highlight-selected");
+    state.chess.moves({ square, verbose: true }).forEach(m => {
+        document.querySelector(`.square-${m.to}`)?.classList.add("highlight-legal");
+    });
+}
+
+function highlightLastMove(from, to) {
+    removeHighlights("lastmove");
+    document.querySelector(`.square-${from}`)?.classList.add("highlight-lastmove");
+    document.querySelector(`.square-${to}`)?.classList.add("highlight-lastmove");
+}
+
+function removeHighlights(type) {
+    const cls = type === "lastmove" ? ".highlight-lastmove"
+              : ".highlight-selected, .highlight-legal";
+    document.querySelectorAll(cls).forEach(el => el.className = el.className
+        .replace(/highlight-(selected|legal|lastmove)/g, "").trim()
+    );
+}
+
+// ── Move navigation ────────────────────────────────────────────────────────────
+function goToMove(index) {
+    if (index < -1 || index >= state.moveHistory.length) return;
+    state.currentMoveIndex = index;
+
+    if (index === -1) {
+        state.chess.reset();
+    } else {
+        state.chess.load(state.moveHistory[index].fen);
+    }
+
+    state.board.position(state.chess.fen(), false);
+
+    // Highlight the last move at this index
+    removeHighlights("lastmove");
+    if (index >= 0) {
+        const mv = state.moveHistory[index];
+        highlightLastMove(mv.from, mv.to);
+    }
+
+    renderMoveList();
+    clearArrow();
+
+    if (state.autoAnalyze) {
+        setTimeout(triggerAnalysis, 150);
+    }
+}
+
+// ── Move list render ───────────────────────────────────────────────────────────
+function renderMoveList() {
+    const container = document.getElementById("move-list");
+    if (state.moveHistory.length === 0) {
+        container.innerHTML = `<p style="font-size:12px;color:var(--text-muted);padding:8px">
+            No moves yet. Make a move or load a FEN.</p>`;
+        return;
+    }
+
+    let html = "";
+    for (let i = 0; i < state.moveHistory.length; i += 2) {
+        const moveNum = Math.floor(i / 2) + 1;
+        const white   = state.moveHistory[i];
+        const black   = state.moveHistory[i + 1];
+        const wActive = state.currentMoveIndex === i     ? "active" : "";
+        const bActive = state.currentMoveIndex === i + 1 ? "active" : "";
+
+        html += `
+        <div class="move-pair">
+            <span class="move-number">${moveNum}.</span>
+            <button class="move-btn ${wActive}" onclick="goToMove(${i})">${white.san}</button>
+            ${black
+                ? `<button class="move-btn ${bActive}" onclick="goToMove(${i + 1})">${black.san}</button>`
+                : `<button class="move-btn empty">—</button>`
+            }
+        </div>`;
+    }
+
+    container.innerHTML = html;
+
+    // Scroll active move into view
+    const active = container.querySelector(".move-btn.active");
+    if (active) active.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+
+// ── FEN loading ────────────────────────────────────────────────────────────────
+function loadFen(fen) {
+    fen = fen.trim();
+    if (!fen) return;
+
+    const result = state.chess.load(fen);
+    if (!result) {
+        alert("Invalid FEN string. Please check and try again.");
+        return;
+    }
+
+    // Reset history for the new position
+    state.moveHistory    = [];
+    state.currentMoveIndex = -1;
+
+    state.board.position(fen, false);
+    removeHighlights("lastmove");
+    renderMoveList();
+    clearArrow();
+
+    if (state.autoAnalyze) triggerAnalysis();
+}
+
+// ── Board theme ────────────────────────────────────────────────────────────────
+function applyThemeColors(themeKey) {
+    const theme = BOARD_THEMES[themeKey];
+    if (!theme) return;
+    state.currentTheme = themeKey;
+
+    // Inject CSS override into page
+    const styleId = "board-theme-override";
+    let styleEl = document.getElementById(styleId);
+    if (!styleEl) {
+        styleEl = document.createElement("style");
+        styleEl.id = styleId;
+        document.head.appendChild(styleEl);
+    }
+    styleEl.textContent = `
+        .white-1e1d7 { background-color: ${theme.light} !important; }
+        .black-3c85d { background-color: ${theme.dark}  !important; }
+    `;
+
+    // Update active swatch
+    document.querySelectorAll(".theme-swatch").forEach(el => {
+        el.classList.toggle("active", el.dataset.theme === themeKey);
+    });
+}
+
+function buildThemeSwatches() {
+    const container = document.getElementById("theme-swatches");
+    Object.entries(BOARD_THEMES).forEach(([key, theme]) => {
+        const el = document.createElement("div");
+        el.className = `theme-swatch ${key === state.currentTheme ? "active" : ""}`;
+        el.dataset.theme = key;
+        el.title = theme.name;
+        el.innerHTML = `
+            <span class="swatch-half" style="background:${theme.light}"></span>
+            <span class="swatch-half" style="background:${theme.dark}"></span>
+            <span class="swatch-half" style="background:${theme.dark}"></span>
+            <span class="swatch-half" style="background:${theme.light}"></span>
+        `;
+        el.addEventListener("click", () => applyThemeColors(key));
+        container.appendChild(el);
+    });
+}
+
+// ── Canvas sizing ──────────────────────────────────────────────────────────────
+function resizeCanvas() {
+    const board  = document.getElementById("board");
+    const canvas = document.getElementById("arrow-canvas");
+    canvas.width  = board.offsetWidth;
+    canvas.height = board.offsetHeight;
+}
+
+// ── Keyboard navigation ────────────────────────────────────────────────────────
+document.addEventListener("keydown", e => {
+    if (e.target.tagName === "INPUT") return;
+    if (e.key === "ArrowLeft")  goToMove(state.currentMoveIndex - 1);
+    if (e.key === "ArrowRight") goToMove(state.currentMoveIndex + 1);
+    if (e.key === "ArrowUp")    goToMove(-1);
+    if (e.key === "ArrowDown")  goToMove(state.moveHistory.length - 1);
+});
+
+// ── Wiring UI controls ─────────────────────────────────────────────────────────
+document.getElementById("btn-start").addEventListener("click", () => goToMove(-1));
+document.getElementById("btn-prev").addEventListener("click",  () => goToMove(state.currentMoveIndex - 1));
+document.getElementById("btn-next").addEventListener("click",  () => goToMove(state.currentMoveIndex + 1));
+document.getElementById("btn-end").addEventListener("click",   () => goToMove(state.moveHistory.length - 1));
+
+document.getElementById("btn-flip").addEventListener("click", () => {
+    state.orientation = state.orientation === "white" ? "black" : "white";
+    state.board.flip();
+    clearArrow();
+    if (state.bestMoveUci && state.showArrow) drawBestMoveArrow(state.bestMoveUci);
+});
+
+document.getElementById("fen-load-btn").addEventListener("click", () => {
+    loadFen(document.getElementById("fen-input").value);
+});
+document.getElementById("fen-input").addEventListener("keydown", e => {
+    if (e.key === "Enter") loadFen(e.target.value);
+});
+
+document.getElementById("depth-slider").addEventListener("input", e => {
+    document.getElementById("depth-value").textContent = e.target.value;
+    if (state.engineReady && state.autoAnalyze) triggerAnalysis();
+});
+
+document.getElementById("threads-slider").addEventListener("input", e => {
+    const v = e.target.value;
+    document.getElementById("threads-value").textContent = v;
+    state.worker?.postMessage({ type: "setoption", name: "Threads", value: v });
+});
+
+document.getElementById("auto-analyze").addEventListener("change", e => {
+    state.autoAnalyze = e.target.checked;
+    if (state.autoAnalyze) triggerAnalysis();
+});
+
+document.getElementById("show-arrow").addEventListener("change", e => {
+    state.showArrow = e.target.checked;
+    if (!state.showArrow) clearArrow();
+    else if (state.bestMoveUci) drawBestMoveArrow(state.bestMoveUci);
+});
+
+window.addEventListener("resize", () => {
+    resizeCanvas();
+    if (state.bestMoveUci && state.showArrow) drawBestMoveArrow(state.bestMoveUci);
+});
+
+// ── Read FEN from URL params ───────────────────────────────────────────────────
+// When user clicks "Analyze" on the scan result page, we pass:
+// analysis.html?fen=rnbqkbnr/pppppppp/...
+function getFenFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("fen");
+}
+
+// ── Boot sequence ──────────────────────────────────────────────────────────────
+(function boot() {
+    buildThemeSwatches();
+
+    const urlFen = getFenFromUrl();
+    if (urlFen) {
+        state.chess.load(urlFen);
+        document.getElementById("fen-input").value = urlFen;
+    }
+
+    initBoard(urlFen || "start");
+    initEngine();
+
+    checkAuth(); // update navbar if user is logged in
+})();
+</script>
+</body>
+</html>
